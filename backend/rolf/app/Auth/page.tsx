@@ -10,7 +10,7 @@ export default function Page() {
       <div>Segments</div>
 
       <div>
-        <form method="POST" action="/api/UserAuth">
+        <form method="POST" action="/api/Auth/login">
           
           <label>UserName</label>
           <input 

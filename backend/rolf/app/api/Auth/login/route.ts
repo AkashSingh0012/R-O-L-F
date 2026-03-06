@@ -1,7 +1,8 @@
 import { Prisma, PrismaClient } from "@prisma/client"; 
 import { NextRequest, NextResponse } from "next/server";
-import { corsHeaders } from "../_utils/cors";
+import { corsHeaders } from "../../_utils/cors";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 const prisma = new PrismaClient()
 
 export async function OPTIONS(req : NextRequest){
@@ -47,16 +48,41 @@ export async function POST(req:NextRequest ){
             return NextResponse.json(
                 
                 {error: "Invalid Credentials"},
-                {status: 401, headers}
-
+                {status: 401, headers},                
             );
         }
+        // Session Tokens
+         const sessionToken = crypto.randomBytes(32).toString("hex");
 
-        
-        return NextResponse.json(
-         {message: "Auth Recived"},
-         {status: 200, headers}   
-        );
+    const expires = new Date();
+    expires.setDate(expires.getHours()+8);//8 Hours session Expires 
+
+    await prisma.session.create({
+      data: {
+        token: sessionToken,
+        userId: Auth.id,
+        expires,
+      },
+    });
+ const response = NextResponse.json(
+      {
+        message: "Auth Success",
+        user: {
+          id: Auth.id,
+          username: Auth.username,
+          role: Auth.role,
+        },
+      },
+      { status: 200, headers }
+    );
+    
+    response.cookies.set("session", sessionToken, {
+      httpOnly: true,
+      sameSite: "strict",
+      secure: false, // change to true in production
+      expires,
+      path: "/",
+    });
 
     }catch(err){
         error_drop.push(err)
