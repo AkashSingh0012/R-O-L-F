@@ -17,11 +17,16 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
+    "baseUrl": ".",        // ← ADD THIS
+    "paths": {             // ← ADD THIS
+      "@/*": ["./*"]
+    },
     "plugins": [
       {
         "name": "next"
       }
     ]
+    
   },
   "include": [
     "next-env.d.ts",

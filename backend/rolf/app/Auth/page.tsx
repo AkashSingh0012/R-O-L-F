@@ -1,39 +1,46 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function Page() {
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const formData = new FormData(e.currentTarget);
+    const data = Object.fromEntries(formData.entries());
+
+    const response = await fetch("/api/Auth/login", {
+      method: "POST",
+      body: JSON.stringify(data),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (response.ok) {
+      router.push("/dashboard"); // Redirect on success
+    } else {
+      alert("Login Failed"); // Handle error gracefully
+    }
+    setLoading(false);
+  };
+
   return (
     <div className="root">
-      <div>Navigation</div>
+      <form onSubmit={handleSubmit}>
+        <label>UserName</label>
+        <input type="text" name="UID" required />
+        
+        <label>PassWord</label>
+        <input type="password" name="PWD" required />
 
-      <div>Segments</div>
-
-      <div>
-        <form method="POST" action="/api/Auth/login">
-          
-          <label>UserName</label>
-          <input 
-            type="text"
-            name="UID"
-            className="UID"
-            required
-          />
-
-          <label>PassWord</label>
-          <input 
-            type="password"
-            name="PWD"
-            className="PWD"
-            required
-          />
-
-          <button type="submit" className="Submit">
-            SUBMIT
-          </button>
-
-        </form>
-      </div>
+        <button type="submit" disabled={loading}>
+          {loading ? "Logging in..." : "SUBMIT"}
+        </button>
+      </form>
     </div>
   );
 }

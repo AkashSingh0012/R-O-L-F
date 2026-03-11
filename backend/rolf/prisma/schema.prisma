@@ -18,7 +18,7 @@ model Session {
 }
 
 model User {
-  id        String   @id
+  id        String   @id @default(cuid())
   email     String   @unique
   username  String   @unique
   password  String
@@ -30,6 +30,8 @@ model User {
   Sheet           Sheet[]
   SheetData       SheetData[]
   SheetPermission SheetPermission[]
+   SheetVersion    SheetVersion[]
+  AuditLog        AuditLog[]
 }
 
 model Sheet {
@@ -40,11 +42,26 @@ model Sheet {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  User            User @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  User            User              @relation(fields: [createdBy], references: [id], onDelete: Cascade)
   SheetData       SheetData?
   SheetPermission SheetPermission[]
+  AuditLog        AuditLog[]
+  SheetVersion SheetVersion[]
+  
 }
+model SheetVersion {
+  id        Int      @id @default(autoincrement())
+  sheetId   Int
+  version   Int
+  data      Json
+  savedBy   String
+  createdAt DateTime @default(now())
 
+  Sheet Sheet  @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  User  User   @relation(fields: [savedBy], references: [id])
+
+  @@unique([sheetId, version])
+}
 model SheetData {
   id        Int      @id @default(autoincrement())
   sheetId   Int      @unique
@@ -66,6 +83,24 @@ model SheetPermission {
   User  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([sheetId, userId])
+}
+
+model AuditLog {
+  id        Int        @id @default(autoincrement())
+  sheetId   Int
+  userId    String
+  action    ActionType // ADDED, DELETED, UPDATED
+  details   Json // e.g., { "row": 5, "col": "B", "old": "X", "new": "Y" }
+  createdAt DateTime   @default(now())
+
+  Sheet Sheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  User  User  @relation(fields: [userId], references: [id])
+}
+
+enum ActionType {
+  ADDED
+  DELETED
+  UPDATED
 }
 
 enum Role {
