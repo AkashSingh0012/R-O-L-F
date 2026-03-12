@@ -28,45 +28,67 @@ export default function SheetPage({ params }: SheetPageProps) {
     const [error, setError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
-
-    useEffect(() => {
-        const fetchSheet = async () => {
-            try {
-                const res = await fetch(`/api/sheets/${id}`);
-                if (!res.ok) {
-                    const errorBody = await res.json();
-                    console.error("API error:", res.status, errorBody);
-                    throw new Error(errorBody.error || "Failed to load sheet");
-                }
-
-                const sheet = await res.json();
-
-                // ✅ Restore full sheet object if saved data exists
-                if (sheet.SheetData?.data) {
-                    setData([{
-                        ...sheet.SheetData.data, // restore full saved state
-                        name: sheet.name,        // always use name from DB
-                    }]);
-                } else {
-                    // Fresh empty sheet
-                    setData([{
-                        name: sheet.name,
-                        celldata: [],
-                        row: 50,
-                        column: 26,
-                    }]);
-                }
-
-            } catch (err) {
-                setError("Could not load sheet.");
-                console.error(err);
-            } finally {
-                setLoading(false);
+useEffect(() => {
+    const fetchSheet = async () => {
+        try {
+            const res = await fetch(`/api/sheets/${id}`);
+            if (!res.ok) {
+                const errorBody = await res.json();
+                console.error("API error:", res.status, errorBody);
+                throw new Error(errorBody.error || "Failed to load sheet");
             }
-        };
 
-        fetchSheet();
-    }, [id]);
+            const sheet = await res.json();
+
+            if (sheet.SheetData?.data) {
+                const savedData = sheet.SheetData.data;
+
+                // ✅ savedData.data is the 2D array
+                const celldata: any[] = [];
+                const grid = savedData.data;
+
+                if (Array.isArray(grid)) {
+                    grid.forEach((row: any[], rowIndex: number) => {
+                        if (Array.isArray(row)) {
+                            row.forEach((cell: any, colIndex: number) => {
+                                if (cell !== null && cell !== undefined) {
+                                    celldata.push({
+                                        r: rowIndex,
+                                        c: colIndex,
+                                        v: cell,
+                                    });
+                                }
+                            });
+                        }
+                    });
+                }
+
+                setData([{
+                    name: sheet.name,
+                    celldata,
+                    row: savedData.row ?? 50,
+                    column: savedData.column ?? 26,
+                }]);
+
+            } else {
+                setData([{
+                    name: sheet.name,
+                    celldata: [],
+                    row: 50,
+                    column: 26,
+                }]);
+            }
+
+        } catch (err) {
+            setError("Could not load sheet.");
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    fetchSheet();
+}, [id]);
 
     const handleSave = async () => {
         setSaving(true);
@@ -75,14 +97,14 @@ export default function SheetPage({ params }: SheetPageProps) {
             const res = await fetch(`/api/sheets/${id}/save`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                // ✅ Save the full sheet object, not just celldata
                 body: JSON.stringify({ data: data[0] }),
             });
 
+            const responseBody = await res.json();
+            console.log("Save response:", res.status, responseBody);
+
             if (!res.ok) {
-                const errorBody = await res.json();
-                console.error("Save API error:", res.status, errorBody);
-                throw new Error(errorBody.error || "Save failed");
+                throw new Error(responseBody.error || "Save failed");
             }
 
             setSaveStatus("saved");
@@ -134,10 +156,10 @@ export default function SheetPage({ params }: SheetPageProps) {
                 </button>
 
                 {saveStatus === "saved" && (
-                    <span style={{ color: "#16a34a", fontSize: "14px" }}> Saved</span>
+                    <span style={{ color: "#16a34a", fontSize: "14px" }}>✓ Saved</span>
                 )}
                 {saveStatus === "error" && (
-                    <span style={{ color: "#dc2626", fontSize: "14px" }}> Save failed</span>
+                    <span style={{ color: "#dc2626", fontSize: "14px" }}>✗ Save failed</span>
                 )}
             </div>
 

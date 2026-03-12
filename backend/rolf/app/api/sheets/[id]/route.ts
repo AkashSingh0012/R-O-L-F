@@ -49,6 +49,7 @@ export async function GET(
         if (!sheet) {
             return NextResponse.json({ error: "Sheet not found" }, { status: 404 });
         }
+        console.log("SheetData:", JSON.stringify(sheet.SheetData?.data).substring(0, 300));
 
         return NextResponse.json(sheet);
 
