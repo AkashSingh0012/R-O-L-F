@@ -27,8 +27,8 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        // ✅ RBAC — only CREATOR or ADMIN can create sheets
-        if (!["CREATOR", "ADMIN"].includes(session.User.role)) {
+        // ✅ RBAC — only USER or ADMIN can create sheets
+        if (!["USER", "ADMIN"].includes(session.User.role)) {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
 

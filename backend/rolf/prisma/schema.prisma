@@ -17,6 +17,20 @@ model Session {
   User User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+model Comment {
+  id        Int      @id @default(autoincrement())
+  sheetId   Int
+  userId    String
+  cellRef   String
+  message   String
+  resolved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // ✅ Added proper relations
+  Sheet Sheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  User  User  @relation(fields: [userId], references: [id])
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -30,8 +44,9 @@ model User {
   Sheet           Sheet[]
   SheetData       SheetData[]
   SheetPermission SheetPermission[]
-   SheetVersion    SheetVersion[]
+  SheetVersion    SheetVersion[]
   AuditLog        AuditLog[]
+  Comment         Comment[]         // ✅ added
 }
 
 model Sheet {
@@ -46,9 +61,10 @@ model Sheet {
   SheetData       SheetData?
   SheetPermission SheetPermission[]
   AuditLog        AuditLog[]
-  SheetVersion SheetVersion[]
-  
+  SheetVersion    SheetVersion[]
+  Comment         Comment[]         // ✅ added
 }
+
 model SheetVersion {
   id        Int      @id @default(autoincrement())
   sheetId   Int
@@ -57,11 +73,12 @@ model SheetVersion {
   savedBy   String
   createdAt DateTime @default(now())
 
-  Sheet Sheet  @relation(fields: [sheetId], references: [id], onDelete: Cascade)
-  User  User   @relation(fields: [savedBy], references: [id])
+  Sheet Sheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  User  User  @relation(fields: [savedBy], references: [id])
 
   @@unique([sheetId, version])
 }
+
 model SheetData {
   id        Int      @id @default(autoincrement())
   sheetId   Int      @unique
@@ -89,8 +106,8 @@ model AuditLog {
   id        Int        @id @default(autoincrement())
   sheetId   Int
   userId    String
-  action    ActionType // ADDED, DELETED, UPDATED
-  details   Json // e.g., { "row": 5, "col": "B", "old": "X", "new": "Y" }
+  action    ActionType
+  details   Json
   createdAt DateTime   @default(now())
 
   Sheet Sheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
@@ -105,8 +122,8 @@ enum ActionType {
 
 enum Role {
   ADMIN
-  CREATOR
   USER
+  VIEWER
 }
 
 enum SheetRole {

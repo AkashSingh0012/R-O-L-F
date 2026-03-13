@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import type { Sheet } from "@fortune-sheet/core";
 import "@fortune-sheet/react/dist/index.css";
 
@@ -16,6 +17,7 @@ interface SheetPageProps {
 
 export default function SheetPage({ params }: SheetPageProps) {
     const { id } = use(params);
+    const router = useRouter(); // ✅ add this
     const [data, setData] = useState<Sheet[]>([
         {
             name: "Sheet1",
@@ -28,67 +30,66 @@ export default function SheetPage({ params }: SheetPageProps) {
     const [error, setError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
-useEffect(() => {
-    const fetchSheet = async () => {
-        try {
-            const res = await fetch(`/api/sheets/${id}`);
-            if (!res.ok) {
-                const errorBody = await res.json();
-                console.error("API error:", res.status, errorBody);
-                throw new Error(errorBody.error || "Failed to load sheet");
-            }
 
-            const sheet = await res.json();
-
-            if (sheet.SheetData?.data) {
-                const savedData = sheet.SheetData.data;
-
-                // ✅ savedData.data is the 2D array
-                const celldata: any[] = [];
-                const grid = savedData.data;
-
-                if (Array.isArray(grid)) {
-                    grid.forEach((row: any[], rowIndex: number) => {
-                        if (Array.isArray(row)) {
-                            row.forEach((cell: any, colIndex: number) => {
-                                if (cell !== null && cell !== undefined) {
-                                    celldata.push({
-                                        r: rowIndex,
-                                        c: colIndex,
-                                        v: cell,
-                                    });
-                                }
-                            });
-                        }
-                    });
+    useEffect(() => {
+        const fetchSheet = async () => {
+            try {
+                const res = await fetch(`/api/sheets/${id}`);
+                if (!res.ok) {
+                    const errorBody = await res.json();
+                    console.error("API error:", res.status, errorBody);
+                    throw new Error(errorBody.error || "Failed to load sheet");
                 }
 
-                setData([{
-                    name: sheet.name,
-                    celldata,
-                    row: savedData.row ?? 50,
-                    column: savedData.column ?? 26,
-                }]);
+                const sheet = await res.json();
 
-            } else {
-                setData([{
-                    name: sheet.name,
-                    celldata: [],
-                    row: 50,
-                    column: 26,
-                }]);
+                if (sheet.SheetData?.data) {
+                    const savedData = sheet.SheetData.data;
+                    const celldata: any[] = [];
+                    const grid = savedData.data;
+
+                    if (Array.isArray(grid)) {
+                        grid.forEach((row: any[], rowIndex: number) => {
+                            if (Array.isArray(row)) {
+                                row.forEach((cell: any, colIndex: number) => {
+                                    if (cell !== null && cell !== undefined) {
+                                        celldata.push({
+                                            r: rowIndex,
+                                            c: colIndex,
+                                            v: cell,
+                                        });
+                                    }
+                                });
+                            }
+                        });
+                    }
+
+                    setData([{
+                        name: sheet.name,
+                        celldata,
+                        row: savedData.row ?? 50,
+                        column: savedData.column ?? 26,
+                    }]);
+
+                } else {
+                    setData([{
+                        name: sheet.name,
+                        celldata: [],
+                        row: 50,
+                        column: 26,
+                    }]);
+                }
+
+            } catch (err) {
+                setError("Could not load sheet.");
+                console.error(err);
+            } finally {
+                setLoading(false);
             }
+        };
 
-        } catch (err) {
-            setError("Could not load sheet.");
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    fetchSheet();
-}, [id]);
+        fetchSheet();
+    }, [id]);
 
     const handleSave = async () => {
         setSaving(true);
@@ -139,6 +140,22 @@ useEffect(() => {
                 gap: "12px",
                 background: "white",
             }}>
+                {/* ✅ Back button */}
+                <button
+                    onClick={() => router.push("/dashboard")}
+                    style={{
+                        padding: "6px 16px",
+                        background: "white",
+                        color: "#374151",
+                        border: "1px solid #d1d5db",
+                        borderRadius: "6px",
+                        cursor: "pointer",
+                        fontWeight: 500,
+                    }}
+                >
+                    ← Dashboard
+                </button>
+
                 <button
                     onClick={handleSave}
                     disabled={saving}
