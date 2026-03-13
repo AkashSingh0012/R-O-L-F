@@ -1,44 +1,52 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Role } from "@prisma/client";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log("🌱 Seeding database...");
 
-  const hashedPassword = await bcrypt.hash("password123", 10);
+  // hash passwords
+  const userPassword = await bcrypt.hash("user", 10);
+  const adminPassword = await bcrypt.hash("admin", 10);
 
-  // Create Admin
-  const user_admin = await prisma.user.upsert({
-    where: { email: "admin@rolf.local" },
+  /**
+   * USER ACCOUNT
+   */
+  await prisma.user.upsert({
+    where: { username: "user" },
     update: {},
     create: {
-      email: "admin@rolf.local",
-      username: "user_admin",
-      password: hashedPassword,
-      role: "ADMIN",
-    },
-  });
-
-  // Create Normal User
-  const user_user = await prisma.user.upsert({
-    where: { email: "user@rolf.local" },
-    update: {},
-    create: {
+      id: crypto.randomUUID(),
       email: "user@rolf.local",
-      username: "user_user",
-      password: hashedPassword,
-      role: "USER",
+      username: "user",
+      password: userPassword,
+      role: Role.USER,
     },
   });
 
-  console.log(" Seed complete.");
-  console.log({ user_admin, user_user });
+  /**
+   * ADMIN ACCOUNT
+   */
+  await prisma.user.upsert({
+    where: { username: "admin" },
+    update: {},
+    create: {
+      id: crypto.randomUUID(),
+      email: "admin@rolf.local",
+      username: "admin",
+      password: adminPassword,
+      role: Role.ADMIN,
+    },
+  });
+
+  console.log("✅ Seed completed");
 }
 
 main()
   .catch((e) => {
-    console.error(" Seed error:", e);
+    console.error("❌ Seed failed:", e);
     process.exit(1);
   })
   .finally(async () => {

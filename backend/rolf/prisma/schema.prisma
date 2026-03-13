@@ -7,56 +7,123 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  createdAt DateTime @default(now())
+  expires   DateTime
+
+  User User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  sheetId   Int
+  userId    String
+  cellRef   String
+  message   String
+  resolved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // ✅ Added proper relations
+  Sheet Sheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  User  User  @relation(fields: [userId], references: [id])
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  username  String   @unique
+  password  String
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  Session         Session[]
+  Sheet           Sheet[]
+  SheetData       SheetData[]
+  SheetPermission SheetPermission[]
+  SheetVersion    SheetVersion[]
+  AuditLog        AuditLog[]
+  Comment         Comment[]         // ✅ added
+}
+
 model Sheet {
-  id              Int               @id @default(autoincrement())
-  name            String
-  createdBy       Int
-  version         Int               @default(1)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime
-  User            User              @relation(fields: [createdBy], references: [id])
+  id        Int      @id @default(autoincrement())
+  name      String
+  createdBy String
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  User            User              @relation(fields: [createdBy], references: [id], onDelete: Cascade)
   SheetData       SheetData?
   SheetPermission SheetPermission[]
+  AuditLog        AuditLog[]
+  SheetVersion    SheetVersion[]
+  Comment         Comment[]         // ✅ added
+}
+
+model SheetVersion {
+  id        Int      @id @default(autoincrement())
+  sheetId   Int
+  version   Int
+  data      Json
+  savedBy   String
+  createdAt DateTime @default(now())
+
+  Sheet Sheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  User  User  @relation(fields: [savedBy], references: [id])
+
+  @@unique([sheetId, version])
 }
 
 model SheetData {
   id        Int      @id @default(autoincrement())
   sheetId   Int      @unique
   data      Json
-  updatedBy Int?
-  updatedAt DateTime
-  Sheet     Sheet    @relation(fields: [sheetId], references: [id])
-  User      User?    @relation(fields: [updatedBy], references: [id])
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+
+  Sheet Sheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  User  User? @relation(fields: [updatedBy], references: [id])
 }
 
 model SheetPermission {
   id      Int       @id @default(autoincrement())
   sheetId Int
-  userId  Int
+  userId  String
   role    SheetRole
-  Sheet   Sheet     @relation(fields: [sheetId], references: [id])
-  User    User      @relation(fields: [userId], references: [id])
+
+  Sheet Sheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  User  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([sheetId, userId])
 }
 
-model User {
-  id              Int               @id @default(autoincrement())
-  email           String            @unique
-  username        String            @unique
-  password        String
-  role            Role              @default(USER)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  Sheet           Sheet[]
-  SheetData       SheetData[]
-  SheetPermission SheetPermission[]
+model AuditLog {
+  id        Int        @id @default(autoincrement())
+  sheetId   Int
+  userId    String
+  action    ActionType
+  details   Json
+  createdAt DateTime   @default(now())
+
+  Sheet Sheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  User  User  @relation(fields: [userId], references: [id])
+}
+
+enum ActionType {
+  ADDED
+  DELETED
+  UPDATED
 }
 
 enum Role {
   ADMIN
-  CREATOR
   USER
+  VIEWER
 }
 
 enum SheetRole {

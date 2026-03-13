@@ -1,8 +1,9 @@
-import { Prisma, PrismaClient } from "@prisma/client"; 
 import { NextRequest, NextResponse } from "next/server";
-import { corsHeaders } from "../_utils/cors";
+import { corsHeaders } from "../../_utils/cors";
+import {prisma} from "@/lib/prisma"
 import bcrypt from "bcrypt";
-const prisma = new PrismaClient()
+import crypto from "crypto";
+
 
 export async function OPTIONS(req : NextRequest){
     const origin = req.headers.get("origin");
@@ -16,13 +17,11 @@ export async function OPTIONS(req : NextRequest){
 export async function POST(req:NextRequest ){
     const origin = req.headers.get("origin");
     const headers = corsHeaders(origin);
-    const error_drop = [];
     try{
-        const formData = await req.formData();
-        const UID = formData.get("UID")?.toString().trim();
-        const PWD = formData.get("PWD")?.toString().trim();
+        const body = await req.json(); // Parses the JSON you sent from frontend
+        const UID = body.UID?.toString().trim();
+        const PWD = body.PWD?.toString().trim()
         if(!PWD || !UID ){
-            error_drop.push("Missing Required Fields");
             return NextResponse.json(
                 {error: "Missing Required Feilds UID or PWD"},
             {status: 400, headers});
@@ -47,20 +46,45 @@ export async function POST(req:NextRequest ){
             return NextResponse.json(
                 
                 {error: "Invalid Credentials"},
-                {status: 401, headers}
-
+                {status: 401, headers},                
             );
         }
+        // Session Tokens
+         const sessionToken = crypto.randomBytes(32).toString("hex");
+         const expires = new Date(Date.now() + 8 * 60 * 60 * 1000);
+            
+        await prisma.session.create({
+        data: {
+            token: sessionToken,
+            userId: Auth.id,
+            expires,
+        },
+        });
 
-        
-        return NextResponse.json(
-         {message: "Auth Recived"},
-         {status: 200, headers}   
+        const response = NextResponse.json(
+        {
+            message: "Auth Success",
+            user: {
+            id: Auth.id,
+            username: Auth.username,
+            role: Auth.role,
+            },
+        },
+        { status: 200, headers }
         );
 
+        // 2. Set as a Session Cookie (Remove 'expires' here to clear on browser close)
+        response.cookies.set("session", sessionToken, {
+        httpOnly: true,
+        sameSite: "strict",
+        secure: process.env.NODE_ENV === "production", 
+        path: "/",
+        });
+
+        // 3. IMPORTANT: Return the response!
+        return response;
+
     }catch(err){
-        error_drop.push(err)
-        console.log(error_drop)
         return NextResponse.json({error: "Internal Error"},
             {status: 500, headers});
     }
