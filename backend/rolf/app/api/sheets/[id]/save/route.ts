@@ -33,20 +33,23 @@ export async function POST(
             return NextResponse.json({ error: "Invalid sheet ID" }, { status: 400 });
         }
 
-        const permission = await prisma.sheetPermission.findUnique({
-            where: {
-                sheetId_userId: {
-                    sheetId,
-                    userId: session.userId,
+        // ✅ ADMIN bypasses permission check
+        if (session.User.role !== "ADMIN") {
+            const permission = await prisma.sheetPermission.findUnique({
+                where: {
+                    sheetId_userId: {
+                        sheetId,
+                        userId: session.userId,
+                    },
                 },
-            },
-        });
+            });
 
-        if (!permission || permission.role === "VIEWER") {
-            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            if (!permission || permission.role === "VIEWER") {
+                return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            }
         }
 
-        const saved = await prisma.sheetData.upsert({
+        await prisma.sheetData.upsert({
             where: { sheetId },
             update: {
                 data: data,
@@ -68,7 +71,6 @@ export async function POST(
             },
         });
 
-        //  Increment version on Sheet
         await prisma.sheet.update({
             where: { id: sheetId },
             data: { version: { increment: 1 } },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import type { Sheet } from "@fortune-sheet/core";
@@ -17,7 +17,8 @@ interface SheetPageProps {
 
 export default function SheetPage({ params }: SheetPageProps) {
     const { id } = use(params);
-    const router = useRouter(); // ✅ add this
+    const router = useRouter();
+    const dataLoaded = useRef(false); // ✅ inside component
     const [data, setData] = useState<Sheet[]>([
         {
             name: "Sheet1",
@@ -44,42 +45,44 @@ export default function SheetPage({ params }: SheetPageProps) {
                 const sheet = await res.json();
 
                 if (sheet.SheetData?.data) {
-                    const savedData = sheet.SheetData.data;
-                    const celldata: any[] = [];
-                    const grid = savedData.data;
+                    const savedSheets = sheet.SheetData.data;
 
-                    if (Array.isArray(grid)) {
-                        grid.forEach((row: any[], rowIndex: number) => {
-                            if (Array.isArray(row)) {
-                                row.forEach((cell: any, colIndex: number) => {
-                                    if (cell !== null && cell !== undefined) {
-                                        celldata.push({
-                                            r: rowIndex,
-                                            c: colIndex,
-                                            v: cell,
+                    if (Array.isArray(savedSheets)) {
+                        const restored = savedSheets.map((s: any) => {
+                            const celldata: any[] = [];
+
+                            if (Array.isArray(s.data)) {
+                                s.data.forEach((row: any[], rowIndex: number) => {
+                                    if (Array.isArray(row)) {
+                                        row.forEach((cell: any, colIndex: number) => {
+                                            if (cell !== null && cell !== undefined) {
+                                                celldata.push({ r: rowIndex, c: colIndex, v: cell });
+                                            }
                                         });
                                     }
                                 });
                             }
+
+                            return {
+                                ...s,
+                                data: undefined,
+                                celldata,
+                            };
                         });
+
+                        setData(restored);
                     }
-
-                    setData([{
-                        name: sheet.name,
-                        celldata,
-                        row: savedData.row ?? 50,
-                        column: savedData.column ?? 26,
-                    }]);
-
                 } else {
                     setData([{
                         name: sheet.name,
                         celldata: [],
                         row: 50,
                         column: 26,
+                        luckysheet_select_save: [],
                     }]);
                 }
 
+                dataLoaded.current = true; // ✅ mark data as loaded
             } catch (err) {
                 setError("Could not load sheet.");
                 console.error(err);
@@ -98,12 +101,10 @@ export default function SheetPage({ params }: SheetPageProps) {
             const res = await fetch(`/api/sheets/${id}/save`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ data: data[0] }),
+                body: JSON.stringify({ data: data }),
             });
 
             const responseBody = await res.json();
-            console.log("Save response:", res.status, responseBody);
-
             if (!res.ok) {
                 throw new Error(responseBody.error || "Save failed");
             }
@@ -140,7 +141,6 @@ export default function SheetPage({ params }: SheetPageProps) {
                 gap: "12px",
                 background: "white",
             }}>
-                {/* ✅ Back button */}
                 <button
                     onClick={() => router.push("/dashboard")}
                     style={{
@@ -184,7 +184,10 @@ export default function SheetPage({ params }: SheetPageProps) {
                 <Workbook
                     data={data}
                     onChange={(updatedData) => {
-                        setData(updatedData);
+                        // ✅ only update state after data has been loaded
+                        if (dataLoaded.current) {
+                            setData(updatedData);
+                        }
                     }}
                 />
             </div>

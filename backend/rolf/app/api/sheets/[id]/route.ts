@@ -4,10 +4,10 @@ import { cookies } from "next/headers";
 
 export async function GET(
     req: Request,
-    { params }: { params: Promise<{ id: string }> } // ✅ params is a Promise
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const { id } = await params; // ✅ await it
+        const { id } = await params;
 
         const token = (await cookies()).get("session")?.value;
         if (!token) {
@@ -23,22 +23,25 @@ export async function GET(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const sheetId = parseInt(id); // ✅ use awaited id
+        const sheetId = parseInt(id);
         if (isNaN(sheetId)) {
             return NextResponse.json({ error: "Invalid sheet ID" }, { status: 400 });
         }
 
-        const permission = await prisma.sheetPermission.findUnique({
-            where: {
-                sheetId_userId: {
-                    sheetId,
-                    userId: session.userId,
+        // ✅ ADMIN bypasses permission check
+        if (session.User.role !== "ADMIN") {
+            const permission = await prisma.sheetPermission.findUnique({
+                where: {
+                    sheetId_userId: {
+                        sheetId,
+                        userId: session.userId,
+                    },
                 },
-            },
-        });
+            });
 
-        if (!permission) {
-            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            if (!permission) {
+                return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            }
         }
 
         const sheet = await prisma.sheet.findUnique({
