@@ -21,9 +21,9 @@ export default function Page() {
     });
 
     if (response.ok) {
-      router.push("/dashboard"); // Redirect on success
+      router.push("/dashboard"); 
     } else {
-      alert("Login Failed"); // Handle error gracefully
+      alert("Login Failed"); 
     }
     setLoading(false);
   };

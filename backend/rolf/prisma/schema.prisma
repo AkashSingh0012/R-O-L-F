@@ -118,6 +118,7 @@ enum ActionType {
   ADDED
   DELETED
   UPDATED
+  ROLLED_BACK
 }
 
 enum Role {
