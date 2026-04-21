@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:socket": "node server.js",
+    "dev:all": "concurrently \"next dev\" \"node server.js\"",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
@@ -12,10 +14,13 @@
     "@fortune-sheet/react": "^1.0.4",
     "@prisma/client": "^6.19.0",
     "bcrypt": "^6.0.0",
+    "express": "^5.2.1",
     "next": "16.1.6",
     "nodemon": "^3.1.14",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -23,6 +28,7 @@
     "@types/node": "^20",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "concurrently": "^9.2.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "prisma": "^6.19.0",

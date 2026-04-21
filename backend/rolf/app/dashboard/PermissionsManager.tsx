@@ -23,7 +23,7 @@ export default function PermissionsManager({ sheetId, sheetName, onClose }: Perm
     const fetchPermissions = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/sheets/${sheetId}/permissions`);
+            const res = await fetch(`/api/sheets/${sheetId}/permissions`, {credentials: "include"});
             const body = await res.json();
             if (!res.ok) {
                 setError(body.error || "Failed to load");
@@ -43,6 +43,7 @@ export default function PermissionsManager({ sheetId, sheetName, onClose }: Perm
     const handleRoleChange = async (userId: string, role: string) => {
         const res = await fetch(`/api/sheets/${sheetId}/permissions`, {
             method: "PATCH",
+            credentials: "include",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userId, role }),
         });
@@ -52,6 +53,7 @@ export default function PermissionsManager({ sheetId, sheetName, onClose }: Perm
     const handleRevoke = async (userId: string) => {
         const res = await fetch(`/api/sheets/${sheetId}/permissions`, {
             method: "DELETE",
+            credentials:"include",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userId }),
         });

@@ -1,95 +1,108 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth"; // your session helper
+import { cookies } from "next/headers";
 
 export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } }
+    req: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
 ) {
-  const sheetId = parseInt(params.id);
-  const { targetVersion } = await req.json();
-  const user = await getSessionUser(req);
+    try {
+        const { id } = await params;
+        const { targetVersion } = await req.json();
 
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+        const token = (await cookies()).get("session")?.value;
+        if (!token) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
 
-  // ── 1. Permission check: ADMIN or sheet OWNER only ──
-  const isAdmin = user.role === "ADMIN";
-  const isOwner = await prisma.sheetPermission.findFirst({
-    where: { sheetId, userId: user.id, role: "OWNER" },
-  });
+        const session = await prisma.session.findUnique({
+            where: { token },
+            include: { User: true },
+        });
 
-  if (!isAdmin && !isOwner) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+        if (!session || session.expires < new Date()) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
 
-  // ── 2. Find the target snapshot ──
-  const snapshot = await prisma.sheetVersion.findUnique({
-    where: { sheetId_version: { sheetId, version: targetVersion } },
-  });
+        const sheetId = parseInt(id);
+        if (isNaN(sheetId)) {
+            return NextResponse.json({ error: "Invalid sheet ID" }, { status: 400 });
+        }
 
-  if (!snapshot) {
-    return NextResponse.json({ error: "Version not found" }, { status: 404 });
-  }
+        // ✅ ADMIN or OWNER only
+        if (session.User.role !== "ADMIN") {
+            const permission = await prisma.sheetPermission.findUnique({
+                where: { sheetId_userId: { sheetId, userId: session.userId } },
+            });
+            if (!permission || permission.role !== "OWNER") {
+                return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+            }
+        }
 
-  // ── 3. Get current sheet for audit ──
-  const currentSheet = await prisma.sheet.findUnique({
-    where: { id: sheetId },
-    include: { SheetData: true },
-  });
+        const snapshot = await prisma.sheetVersion.findUnique({
+            where: { sheetId_version: { sheetId, version: targetVersion } },
+        });
+        if (!snapshot) {
+            return NextResponse.json({ error: "Version not found" }, { status: 404 });
+        }
 
-  if (!currentSheet) {
-    return NextResponse.json({ error: "Sheet not found" }, { status: 404 });
-  }
+        const currentSheet = await prisma.sheet.findUnique({
+            where: { id: sheetId },
+            include: { SheetData: true },
+        });
+        if (!currentSheet) {
+            return NextResponse.json({ error: "Sheet not found" }, { status: 404 });
+        }
 
-  const newVersion = currentSheet.version + 1;
+        const newVersion = currentSheet.version + 1;
 
-  // ── 4. Atomic transaction: snapshot current → restore target ──
-  await prisma.$transaction([
-    // Save current state as a new version before overwriting
-    prisma.sheetVersion.create({
-      data: {
-        sheetId,
-        version: newVersion,
-        data: currentSheet.SheetData?.data ?? {},
-        savedBy: user.id,
-      },
-    }),
+        await prisma.$transaction([
+            // Save current state as new version before overwriting
+            prisma.sheetVersion.create({
+                data: {
+                    sheetId,
+                    version: newVersion,
+                    data: currentSheet.SheetData?.data ?? {},
+                    savedBy: session.userId,
+                },
+            }),
+            // Restore target snapshot into SheetData
+            prisma.sheetData.update({
+                where: { sheetId },
+                data: {
+                    data: snapshot.data,
+                    updatedBy: session.userId,
+                },
+            }),
+            // Bump version counter
+            prisma.sheet.update({
+                where: { id: sheetId },
+                data: { version: newVersion },
+            }),
+            // Audit log
+            prisma.auditLog.create({
+                data: {
+                    sheetId,
+                    userId: session.userId,
+                    action: "UPDATED",
+                    details: {
+                        message: `Rolled back to version ${targetVersion}`,
+                        restoredToVersion: targetVersion,
+                        previousVersion: currentSheet.version,
+                        newVersion,
+                    },
+                },
+            }),
+        ]);
 
-    // Restore the target snapshot into SheetData
-    prisma.sheetData.update({
-      where: { sheetId },
-      data: {
-        data: snapshot.data,
-        updatedBy: user.id,
-      },
-    }),
+        return NextResponse.json({
+            success: true,
+            restoredToVersion: targetVersion,
+            newVersion,
+        });
 
-    // Bump sheet version counter
-    prisma.sheet.update({
-      where: { id: sheetId },
-      data: { version: newVersion },
-    }),
-
-    // Audit log
-    prisma.auditLog.create({
-      data: {
-        sheetId,
-        userId: user.id,
-        action: "ROLLED_BACK",
-        details: {
-          restoredToVersion: targetVersion,
-          previousVersion: currentSheet.version,
-          newVersion,
-        },
-      },
-    }),
-  ]);
-
-  return NextResponse.json({
-    success: true,
-    restoredToVersion: targetVersion,
-    newVersion,
-  });
+    } catch (err) {
+        console.error("Rollback error:", err);
+        return NextResponse.json({ error: "Internal Error" }, { status: 500 });
+    }
 }

@@ -5,10 +5,11 @@ import { useState } from "react";
 interface ShareDialogProps {
     sheetId: number;
     sheetName: string;
+    isOwner: boolean;
     onClose: () => void;
 }
 
-export default function ShareDialog({ sheetId, sheetName, onClose }: ShareDialogProps) {
+export default function ShareDialog({ sheetId, sheetName, isOwner, onClose }: ShareDialogProps) {
     const [username, setUsername] = useState("");
     const [role, setRole] = useState<"EDITOR" | "VIEWER">("VIEWER");
     const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -22,6 +23,7 @@ export default function ShareDialog({ sheetId, sheetName, onClose }: ShareDialog
         try {
             const res = await fetch(`/api/sheets/${sheetId}/permissions`, {
                 method: "POST",
+                credentials: "include",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username: username.trim(), role }),
             });
@@ -56,69 +58,101 @@ export default function ShareDialog({ sheetId, sheetName, onClose }: ShareDialog
                 <h3 style={{ fontWeight: 700, fontSize: "16px", marginBottom: "4px" }}>
                     Share "{sheetName}"
                 </h3>
-                <p style={{ fontSize: "13px", color: "#6b7280", marginBottom: "16px" }}>
-                    Enter a username to grant access
-                </p>
 
-                <input
-                    type="text"
-                    placeholder="Username"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleShare()}
-                    style={{
-                        width: "100%", padding: "8px 12px",
-                        border: "1px solid #d1d5db", borderRadius: "6px",
-                        fontSize: "14px", marginBottom: "10px",
-                        boxSizing: "border-box",
-                    }}
-                />
+                {!isOwner ? (
+                    // ── No-permission state ──
+                    <>
+                        <div style={{
+                            background: "#fef9c3",
+                            border: "1px solid #fde047",
+                            borderRadius: "6px",
+                            padding: "12px",
+                            fontSize: "13px",
+                            color: "#854d0e",
+                            marginTop: "12px",
+                            marginBottom: "20px",
+                        }}>
+                            ⚠ You don't have permission to share this sheet. Please contact the sheet owner to request access changes.
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                            <button onClick={onClose} style={{
+                                padding: "7px 16px", borderRadius: "6px",
+                                border: "1px solid #d1d5db", background: "white",
+                                cursor: "pointer", fontSize: "14px",
+                            }}>
+                                Close
+                            </button>
+                        </div>
+                    </>
+                ) : (
+                    // ── Owner share form ──
+                    <>
+                        <p style={{ fontSize: "13px", color: "#6b7280", marginBottom: "16px" }}>
+                            Enter a username to grant access
+                        </p>
 
-                <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value as "EDITOR" | "VIEWER")}
-                    style={{
-                        width: "100%", padding: "8px 12px",
-                        border: "1px solid #d1d5db", borderRadius: "6px",
-                        fontSize: "14px", marginBottom: "16px",
-                        boxSizing: "border-box",
-                    }}
-                >
-                    <option value="VIEWER">Viewer — can view only</option>
-                    <option value="EDITOR">Editor — can view and edit</option>
-                </select>
+                        <input
+                            type="text"
+                            placeholder="Username"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && handleShare()}
+                            style={{
+                                width: "100%", padding: "8px 12px",
+                                border: "1px solid #d1d5db", borderRadius: "6px",
+                                fontSize: "14px", marginBottom: "10px",
+                                boxSizing: "border-box",
+                            }}
+                        />
 
-                {message && (
-                    <p style={{
-                        fontSize: "13px", marginBottom: "12px",
-                        color: status === "success" ? "#16a34a" : "#dc2626",
-                    }}>
-                        {status === "success" ? "✓" : "✗"} {message}
-                    </p>
+                        <select
+                            value={role}
+                            onChange={(e) => setRole(e.target.value as "EDITOR" | "VIEWER")}
+                            style={{
+                                width: "100%", padding: "8px 12px",
+                                border: "1px solid #d1d5db", borderRadius: "6px",
+                                fontSize: "14px", marginBottom: "16px",
+                                boxSizing: "border-box",
+                            }}
+                        >
+                            <option value="VIEWER">Viewer — can view only</option>
+                            <option value="EDITOR">Editor — can view and edit</option>
+                        </select>
+
+                        {message && (
+                            <p style={{
+                                fontSize: "13px", marginBottom: "12px",
+                                color: status === "success" ? "#16a34a" : "#dc2626",
+                            }}>
+                                {status === "success" ? "✓" : "✗"} {message}
+                            </p>
+                        )}
+
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                            <button onClick={onClose} style={{
+                                padding: "7px 16px", borderRadius: "6px",
+                                border: "1px solid #d1d5db", background: "white",
+                                cursor: "pointer", fontSize: "14px",
+                            }}>
+                                Close
+                            </button>
+                            <button
+                                onClick={handleShare}
+                                disabled={status === "loading" || !username.trim()}
+                                style={{
+                                    padding: "7px 16px", borderRadius: "6px",
+                                    border: "none",
+                                    background: status === "loading" || !username.trim() ? "#9ca3af" : "#2563eb",
+                                    color: "white",
+                                    cursor: status === "loading" ? "not-allowed" : "pointer",
+                                    fontSize: "14px", fontWeight: 500,
+                                }}
+                            >
+                                {status === "loading" ? "Sharing..." : "Share"}
+                            </button>
+                        </div>
+                    </>
                 )}
-
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
-                    <button onClick={onClose} style={{
-                        padding: "7px 16px", borderRadius: "6px",
-                        border: "1px solid #d1d5db", background: "white",
-                        cursor: "pointer", fontSize: "14px",
-                    }}>
-                        Close
-                    </button>
-                    <button
-                        onClick={handleShare}
-                        disabled={status === "loading" || !username.trim()}
-                        style={{
-                            padding: "7px 16px", borderRadius: "6px",
-                            border: "none",
-                            background: status === "loading" || !username.trim() ? "#9ca3af" : "#2563eb",
-                            color: "white", cursor: status === "loading" ? "not-allowed" : "pointer",
-                            fontSize: "14px", fontWeight: 500,
-                        }}
-                    >
-                        {status === "loading" ? "Sharing..." : "Share"}
-                    </button>
-                </div>
             </div>
         </div>
     );

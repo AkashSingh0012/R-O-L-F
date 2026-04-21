@@ -18,10 +18,21 @@ export default async function DashboardPage() {
     if (!user) redirect("/Auth");
 
     const workbooks = await prisma.sheet.findMany({
-        where: user.role === "ADMIN" ? {} : { createdBy: user.id },
+        where: user.role === "ADMIN"
+            ? {}
+            : {
+                OR: [
+                    { createdBy: user.id },
+                    { SheetPermission: { some: { userId: user.id } } },
+                ],
+            },
         orderBy: { createdAt: "desc" },
         include: {
             User: { select: { username: true } },
+            SheetPermission: {
+                where: { userId: user.id },
+                select: { role: true },
+            },
         },
     });
 
@@ -31,13 +42,14 @@ export default async function DashboardPage() {
             <div className="flex flex-1 overflow-hidden">
                 <div className="w-full p-4 overflow-y-auto">
                     <h2 className="text-xl font-bold mb-4">
-                        {user.role === "ADMIN" ? "All Workbooks" : "Your Workbooks"}
+                        {user.role === "ADMIN" ? "All Workbooks" : "My Workbooks"}
                     </h2>
                     <DashboardClient
                         workbooks={workbooks.map((s) => ({
                             ...s,
                             createdAt: s.createdAt.toISOString(),
                             updatedAt: s.updatedAt.toISOString(),
+                            userSheetRole: s.SheetPermission?.[0]?.role ?? (s.createdBy === user.id ? "OWNER" : null),
                         }))}
                         isAdmin={user.role === "ADMIN"}
                     />

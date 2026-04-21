@@ -104,13 +104,12 @@ model SheetPermission {
 
 model AuditLog {
   id        Int        @id @default(autoincrement())
-  sheetId   Int
+  sheetId   Int?                          // ← nullable
   userId    String
   action    ActionType
   details   Json
   createdAt DateTime   @default(now())
-
-  Sheet Sheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  Sheet Sheet? @relation(fields: [sheetId], references: [id], onDelete: SetNull)  // ← SetNull
   User  User  @relation(fields: [userId], references: [id])
 }
 
