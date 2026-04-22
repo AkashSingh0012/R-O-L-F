@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 
-export async function DELETE(
+export async function GET(
     req: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
@@ -18,35 +18,34 @@ export async function DELETE(
     });
 
     if (!session || session.expires < new Date()) {
-        return NextResponse.json({ error: "Session expired" }, { status: 401 });
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const user = session.User;
 
+    // Any sheet participant can view version history (OWNER, EDITOR, VIEWER, ADMIN)
     if (user.role !== "ADMIN") {
         const permission = await prisma.sheetPermission.findUnique({
             where: { sheetId_userId: { sheetId, userId: user.id } },
         });
-        if (!permission || permission.role !== "OWNER") {
+        if (!permission) {
             return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
     }
 
-    // ── Soft delete ──
-    await prisma.sheet.update({
-        where: { id: sheetId },
-        data: { deletedAt: new Date() },
-    });
-
-    // ── Audit log ──
-    await prisma.auditLog.create({
-        data: {
-            sheetId,
-            userId: user.id,
-            action: "DELETED",
-            details: { message: `Sheet soft deleted by ${user.username}` },
+    const versions = await prisma.sheetVersion.findMany({
+        where: { sheetId },
+        orderBy: { version: "desc" },
+        select: {
+            id: true,
+            version: true,
+            createdAt: true,
+            savedBy: true,
+            User: {
+                select: { username: true },
+            },
         },
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json(versions);
 }

@@ -17,8 +17,8 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
-    "baseUrl": ".",        // ← ADD THIS
-    "paths": {             // ← ADD THIS
+    "baseUrl": ".",        
+    "paths": {             
       "@/*": ["./*"]
     },
     "plugins": [

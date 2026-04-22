@@ -15,6 +15,8 @@ model Session {
   expires   DateTime
 
   User User @relation(fields: [userId], references: [id], onDelete: Cascade)
+   @@index([expires])   // ← ADD THIS — makes background cleanup fast
+  @@index([userId])    // ← ADD THIS — makes per-user delete fast
 }
 
 model Comment {
@@ -62,7 +64,11 @@ model Sheet {
   SheetPermission SheetPermission[]
   AuditLog        AuditLog[]
   SheetVersion    SheetVersion[]
-  Comment         Comment[]         // ✅ added
+  Comment         Comment[]         
+  deletedAt DateTime?
+  snapshotData  Json?
+  snapshotAt    DateTime?
+  snapshotBy    String?
 }
 
 model SheetVersion {

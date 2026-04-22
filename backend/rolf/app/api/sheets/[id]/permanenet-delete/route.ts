@@ -18,7 +18,7 @@ export async function DELETE(
     });
 
     if (!session || session.expires < new Date()) {
-        return NextResponse.json({ error: "Session expired" }, { status: 401 });
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const user = session.User;
@@ -32,21 +32,8 @@ export async function DELETE(
         }
     }
 
-    // ── Soft delete ──
-    await prisma.sheet.update({
-        where: { id: sheetId },
-        data: { deletedAt: new Date() },
-    });
-
-    // ── Audit log ──
-    await prisma.auditLog.create({
-        data: {
-            sheetId,
-            userId: user.id,
-            action: "DELETED",
-            details: { message: `Sheet soft deleted by ${user.username}` },
-        },
-    });
+    // Hard delete — cascades to SheetData, SheetPermission, SheetVersion, Comment
+    await prisma.sheet.delete({ where: { id: sheetId } });
 
     return NextResponse.json({ success: true });
 }

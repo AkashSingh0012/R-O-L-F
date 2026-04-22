@@ -17,10 +17,12 @@ export default async function DashboardPage() {
     const user = session?.User;
     if (!user) redirect("/Auth");
 
+    // ── Active sheets ──
     const workbooks = await prisma.sheet.findMany({
         where: user.role === "ADMIN"
-            ? {}
+            ? { deletedAt: null }
             : {
+                deletedAt: null,
                 OR: [
                     { createdBy: user.id },
                     { SheetPermission: { some: { userId: user.id } } },
@@ -36,6 +38,22 @@ export default async function DashboardPage() {
         },
     });
 
+    // ── Deleted sheets (recycle bin) ──
+    const deletedWorkbooks = user.role === "ADMIN"
+        ? await prisma.sheet.findMany({
+            where: { deletedAt: { not: null } },
+            orderBy: { deletedAt: "desc" },
+            include: { User: { select: { username: true } } },
+        })
+        : await prisma.sheet.findMany({
+            where: {
+                deletedAt: { not: null },
+                SheetPermission: { some: { userId: user.id, role: "OWNER" } },
+            },
+            orderBy: { deletedAt: "desc" },
+            include: { User: { select: { username: true } } },
+        });
+
     return (
         <div className="flex flex-col h-screen">
             <Navbar role={user.role} />
@@ -49,7 +67,14 @@ export default async function DashboardPage() {
                             ...s,
                             createdAt: s.createdAt.toISOString(),
                             updatedAt: s.updatedAt.toISOString(),
+                            deletedAt: s.deletedAt?.toISOString() ?? null,
                             userSheetRole: s.SheetPermission?.[0]?.role ?? (s.createdBy === user.id ? "OWNER" : null),
+                        }))}
+                        deletedWorkbooks={deletedWorkbooks.map((s) => ({
+                            ...s,
+                            createdAt: s.createdAt.toISOString(),
+                            updatedAt: s.updatedAt.toISOString(),
+                            deletedAt: s.deletedAt?.toISOString() ?? null,
                         }))}
                         isAdmin={user.role === "ADMIN"}
                     />

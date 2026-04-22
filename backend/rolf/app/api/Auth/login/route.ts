@@ -32,9 +32,9 @@ export async function POST(req: NextRequest) {
             where: {
                 OR: [
                     { username: UID },
-                    { email: UID }
-                ]
-            }
+                    { email: UID },
+                ],
+            },
         });
 
         if (!Auth) {
@@ -52,14 +52,9 @@ export async function POST(req: NextRequest) {
             );
         }
 
-        // ✅ Delete all existing sessions for this user (old + expired)
+        // Delete only THIS user's existing sessions — fast, hits the userId index
         await prisma.session.deleteMany({
-            where: {
-                OR: [
-                    { userId: Auth.id },                  // same user logging in again
-                    { expires: { lt: new Date() } },      // any expired sessions system-wide
-                ]
-            }
+            where: { userId: Auth.id },
         });
 
         const sessionToken = crypto.randomBytes(32).toString("hex");
@@ -72,6 +67,12 @@ export async function POST(req: NextRequest) {
                 expires,
             },
         });
+
+        // ✅ Fire-and-forget: clean up expired sessions from other users
+        // Does NOT block the login response — runs in the background
+        prisma.session.deleteMany({
+            where: { expires: { lt: new Date() } },
+        }).catch((err) => console.error("Background session cleanup failed:", err));
 
         const response = NextResponse.json(
             {
