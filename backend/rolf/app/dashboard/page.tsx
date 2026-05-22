@@ -4,6 +4,18 @@ import { prisma } from "@/lib/prisma";
 import Navbar from "./Navbar";
 import DashboardClient from "./DashboardClient";
 
+// Fields needed by the dashboard — excludes snapshotData (large JSON blob)
+const sheetSelect = {
+    id: true,
+    name: true,
+    createdBy: true,
+    createdAt: true,
+    updatedAt: true,
+    deletedAt: true,
+    snapshotAt: true,
+    User: { select: { username: true } },
+} as const;
+
 export default async function DashboardPage() {
     const cookieStore = await cookies();
     const token = cookieStore.get("session")?.value;
@@ -17,42 +29,43 @@ export default async function DashboardPage() {
     const user = session?.User;
     if (!user) redirect("/Auth");
 
-    // ── Active sheets ──
-    const workbooks = await prisma.sheet.findMany({
-        where: user.role === "ADMIN"
-            ? { deletedAt: null }
-            : {
-                deletedAt: null,
-                OR: [
-                    { createdBy: user.id },
-                    { SheetPermission: { some: { userId: user.id } } },
-                ],
-            },
-        orderBy: { createdAt: "desc" },
-        include: {
-            User: { select: { username: true } },
-            SheetPermission: {
-                where: { userId: user.id },
-                select: { role: true },
-            },
-        },
-    });
+    const isAdmin = user.role === "ADMIN";
 
-    // ── Deleted sheets (recycle bin) ──
-    const deletedWorkbooks = user.role === "ADMIN"
-        ? await prisma.sheet.findMany({
-            where: { deletedAt: { not: null } },
-            orderBy: { deletedAt: "desc" },
-            include: { User: { select: { username: true } } },
-        })
-        : await prisma.sheet.findMany({
-            where: {
-                deletedAt: { not: null },
-                SheetPermission: { some: { userId: user.id, role: "OWNER" } },
+    // ── Run active + deleted sheet queries in parallel ──
+    const [workbooksRaw, deletedWorkbooksRaw] = await Promise.all([
+        // Active sheets
+        prisma.sheet.findMany({
+            where: isAdmin
+                ? { deletedAt: null }
+                : {
+                    deletedAt: null,
+                    OR: [
+                        { createdBy: user.id },
+                        { SheetPermission: { some: { userId: user.id } } },
+                    ],
+                },
+            orderBy: { createdAt: "desc" },
+            select: {
+                ...sheetSelect,
+                SheetPermission: {
+                    where: { userId: user.id },
+                    select: { role: true },
+                },
             },
+        }),
+
+        // Deleted sheets (recycle bin)
+        prisma.sheet.findMany({
+            where: isAdmin
+                ? { deletedAt: { not: null } }
+                : {
+                    deletedAt: { not: null },
+                    SheetPermission: { some: { userId: user.id, role: "OWNER" } },
+                },
             orderBy: { deletedAt: "desc" },
-            include: { User: { select: { username: true } } },
-        });
+            select: sheetSelect,
+        }),
+    ]);
 
     return (
         <div className="flex flex-col h-screen">
@@ -60,23 +73,24 @@ export default async function DashboardPage() {
             <div className="flex flex-1 overflow-hidden">
                 <div className="w-full p-4 overflow-y-auto">
                     <h2 className="text-xl font-bold mb-4">
-                        {user.role === "ADMIN" ? "All Workbooks" : "My Workbooks"}
+                        {isAdmin ? "All Workbooks" : "My Workbooks"}
                     </h2>
                     <DashboardClient
-                        workbooks={workbooks.map((s) => ({
+                        workbooks={workbooksRaw.map((s) => ({
                             ...s,
                             createdAt: s.createdAt.toISOString(),
                             updatedAt: s.updatedAt.toISOString(),
                             deletedAt: s.deletedAt?.toISOString() ?? null,
+                            snapshotAt: s.snapshotAt?.toISOString() ?? null,
                             userSheetRole: s.SheetPermission?.[0]?.role ?? (s.createdBy === user.id ? "OWNER" : null),
                         }))}
-                        deletedWorkbooks={deletedWorkbooks.map((s) => ({
+                        deletedWorkbooks={deletedWorkbooksRaw.map((s) => ({
                             ...s,
                             createdAt: s.createdAt.toISOString(),
                             updatedAt: s.updatedAt.toISOString(),
                             deletedAt: s.deletedAt?.toISOString() ?? null,
                         }))}
-                        isAdmin={user.role === "ADMIN"}
+                        isAdmin={isAdmin}
                     />
                 </div>
             </div>

@@ -52,6 +52,10 @@ const btnStyle = (variant: "default" | "danger" | "primary" | "purple" = "defaul
 });
 
 export default function DashboardClient({ workbooks, deletedWorkbooks = [], isAdmin }: Props) {
+    // Local copies of props — updated optimistically so we never need router.refresh()
+    const [activeSheets, setActiveSheets] = useState<Sheet[]>(workbooks);
+    const [deletedSheets, setDeletedSheets] = useState<DeletedSheet[]>(deletedWorkbooks);
+
     const [shareSheet, setShareSheet] = useState<Sheet | null>(null);
     const [permSheet, setPermSheet] = useState<Sheet | null>(null);
     const [deleteSheet, setDeleteSheet] = useState<Sheet | null>(null);
@@ -84,8 +88,18 @@ export default function DashboardClient({ workbooks, deletedWorkbooks = [], isAd
                 credentials: "include",
             });
             if (res.ok) {
+                // Optimistic update — move sheet from active to deleted locally
+                const moved = deleteSheet;
+                setActiveSheets(prev => prev.filter(s => s.id !== moved.id));
+                setDeletedSheets(prev => [{
+                    id: moved.id,
+                    name: moved.name,
+                    createdAt: moved.createdAt,
+                    updatedAt: moved.updatedAt,
+                    deletedAt: new Date().toISOString(),
+                    User: moved.User,
+                }, ...prev]);
                 setDeleteSheet(null);
-                router.refresh();
             } else {
                 const body = await res.json();
                 alert(body.error || "Failed to delete");
@@ -106,8 +120,10 @@ export default function DashboardClient({ workbooks, deletedWorkbooks = [], isAd
                 credentials: "include",
             });
             if (res.ok) {
-                alert("Snapshot created successfully");
-                router.refresh();
+                const now = new Date().toISOString();
+                setActiveSheets(prev => prev.map(s =>
+                    s.id === sheetId ? { ...s, snapshotAt: now } : s
+                ));
             } else {
                 const body = await res.json();
                 alert(body.error || "Snapshot failed");
@@ -132,8 +148,7 @@ export default function DashboardClient({ workbooks, deletedWorkbooks = [], isAd
                 method: "POST",
                 credentials: "include",
             });
-            if (res.ok) router.refresh();
-            else {
+            if (!res.ok) {
                 const body = await res.json();
                 alert(body.error || "Restore failed");
             }
@@ -152,8 +167,23 @@ export default function DashboardClient({ workbooks, deletedWorkbooks = [], isAd
                 method: "POST",
                 credentials: "include",
             });
-            if (res.ok) router.refresh();
-            else {
+            if (res.ok) {
+                // Move sheet back from deleted to active locally
+                const sheet = deletedSheets.find(s => s.id === sheetId);
+                if (sheet) {
+                    setDeletedSheets(prev => prev.filter(s => s.id !== sheetId));
+                    setActiveSheets(prev => [{
+                        id: sheet.id,
+                        name: sheet.name,
+                        createdAt: sheet.createdAt,
+                        updatedAt: new Date().toISOString(),
+                        deletedAt: null,
+                        snapshotAt: null,
+                        User: sheet.User,
+                        userSheetRole: "OWNER",
+                    }, ...prev]);
+                }
+            } else {
                 const body = await res.json();
                 alert(body.error || "Restore failed");
             }
@@ -173,8 +203,9 @@ export default function DashboardClient({ workbooks, deletedWorkbooks = [], isAd
                 method: "DELETE",
                 credentials: "include",
             });
-            if (res.ok) router.refresh();
-            else {
+            if (res.ok) {
+                setDeletedSheets(prev => prev.filter(s => s.id !== sheetId));
+            } else {
                 const body = await res.json();
                 alert(body.error || "Failed to permanently delete");
             }
@@ -213,8 +244,10 @@ export default function DashboardClient({ workbooks, deletedWorkbooks = [], isAd
                 setRenameError(body.error || "Rename failed");
                 return;
             }
+            setActiveSheets(prev => prev.map(s =>
+                s.id === renameSheet.id ? { ...s, name: trimmed } : s
+            ));
             setRenameSheet(null);
-            router.refresh();
         } catch {
             setRenameError("Something went wrong");
         } finally {
@@ -225,10 +258,10 @@ export default function DashboardClient({ workbooks, deletedWorkbooks = [], isAd
     return (
         <>
             {/* ── Active workbooks ── */}
-            {workbooks.length === 0 && (
+            {activeSheets.length === 0 && (
                 <p className="text-gray-400 text-sm">No sheets yet. Create one!</p>
             )}
-            {workbooks.map((sheet) => {
+            {activeSheets.map((sheet) => {
                 const isOwner = isAdmin || sheet.userSheetRole === "OWNER";
                 return (
                     <div key={sheet.id} style={{
@@ -308,7 +341,7 @@ export default function DashboardClient({ workbooks, deletedWorkbooks = [], isAd
             })}
 
             {/* ── Recycle bin toggle ── */}
-            {deletedWorkbooks.length > 0 && (
+            {deletedSheets.length > 0 && (
                 <div style={{ marginTop: "32px" }}>
                     <button
                         onClick={() => setShowRecycleBin(v => !v)}
@@ -319,7 +352,7 @@ export default function DashboardClient({ workbooks, deletedWorkbooks = [], isAd
                             display: "flex", alignItems: "center", gap: "6px",
                         }}
                     >
-                        🗑 {showRecycleBin ? "Hide" : "Show"} Recycle Bin ({deletedWorkbooks.length})
+                        🗑 {showRecycleBin ? "Hide" : "Show"} Recycle Bin ({deletedSheets.length})
                     </button>
 
                     {showRecycleBin && (
@@ -327,7 +360,7 @@ export default function DashboardClient({ workbooks, deletedWorkbooks = [], isAd
                             marginTop: "12px", border: "1px solid #f3f4f6",
                             borderRadius: "8px", overflow: "hidden",
                         }}>
-                            {deletedWorkbooks.map((sheet) => (
+                            {deletedSheets.map((sheet) => (
                                 <div key={sheet.id} style={{
                                     display: "flex", alignItems: "center",
                                     justifyContent: "space-between",

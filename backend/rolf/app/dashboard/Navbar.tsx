@@ -20,7 +20,7 @@ export default function Navbar({ role }: NavbarProps) {
     return (
         <>
             <nav className="p-4 border-b flex justify-between items-center">
-                <span className="font-bold text-lg">ROLF</span>
+                <span className="font-bold text-lg">ICARS DataBase</span>
                 <div className="flex gap-3">
                     {role === "ADMIN" && (
                         <button

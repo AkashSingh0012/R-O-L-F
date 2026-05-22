@@ -49,6 +49,7 @@ export default function SheetPage({ params }: SheetPageProps) {
     const isApplyingRemoteOp = useRef(false);
     const activeLocks = useRef<Record<string, LockInfo>>({});
     const onChangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const isMounted = useRef(false);  // guard against post-unmount state updates and applyOp calls
 
     const [data, setData] = useState<Sheet[]>([
         { name: "Sheet1", celldata: [], row: 50, column: 26 },
@@ -175,8 +176,13 @@ export default function SheetPage({ params }: SheetPageProps) {
             }
         };
 
+        isMounted.current = true;
         fetchSheet();
-        return () => { disconnectSocket(); };
+        return () => {
+            isMounted.current = false;
+            if (onChangeTimer.current) clearTimeout(onChangeTimer.current);
+            disconnectSocket();
+        };
     }, [id]);
 
     const initSocket = (userId: string, username: string) => {
@@ -186,6 +192,9 @@ export default function SheetPage({ params }: SheetPageProps) {
         let lastRow = -1;
         let lastCol = -1;
 
+        // 500ms interval — presence/lock updates don't need to be instant.
+        // Socket emits are wrapped in setTimeout(0) to yield to any pending
+        // user interactions before doing network work, keeping INP low.
         const selectionInterval = setInterval(() => {
             if (!workbookRef.current || !currentUserRef.current) return;
             const selection = workbookRef.current.getSelection();
@@ -197,31 +206,39 @@ export default function SheetPage({ params }: SheetPageProps) {
 
             if (row === lastRow && col === lastCol) return;
 
-            if (lastRow !== -1) {
-                socket.emit("cell-unlock", {
-                    sheetId: parseInt(id),
-                    cellRef: `${getActiveSheetId()}:${lastRow}:${lastCol}`,
-                });
-            }
-
+            const prevRow = lastRow;
+            const prevCol = lastCol;
             lastRow = row;
             lastCol = col;
 
-            socket.emit("cell-lock", {
-                sheetId: parseInt(id),
-                cellRef: `${getActiveSheetId()}:${row}:${col}`,
-            });
+            // Yield to browser before emitting — prevents blocking input handling
+            setTimeout(() => {
+                if (!isMounted.current) return;
 
-            const user = currentUserRef.current;
-            socket.emit("cell-select", {
-                sheetId: parseInt(id),
-                userId: user.userId,
-                username: user.username,
-                row,
-                col,
-                sheetId_str: getActiveSheetId(),
-            });
-        }, 200);
+                if (prevRow !== -1) {
+                    socket.emit("cell-unlock", {
+                        sheetId: parseInt(id),
+                        cellRef: `${getActiveSheetId()}:${prevRow}:${prevCol}`,
+                    });
+                }
+
+                socket.emit("cell-lock", {
+                    sheetId: parseInt(id),
+                    cellRef: `${getActiveSheetId()}:${row}:${col}`,
+                });
+
+                const user = currentUserRef.current;
+                if (!user) return;
+                socket.emit("cell-select", {
+                    sheetId: parseInt(id),
+                    userId: user.userId,
+                    username: user.username,
+                    row,
+                    col,
+                    sheetId_str: getActiveSheetId(),
+                });
+            }, 0);
+        }, 500);
 
         socket.on("disconnect", () => clearInterval(selectionInterval));
 
@@ -271,7 +288,7 @@ export default function SheetPage({ params }: SheetPageProps) {
 
         socket.on("cell-updated", ({ ops, userId: fromUserId }: { ops: Op[], userId: string }) => {
             if (fromUserId === userId) return;
-            if (!workbookRef.current) return;
+            if (!workbookRef.current || !isMounted.current) return;
             isApplyingRemoteOp.current = true;
             workbookRef.current.applyOp(ops);
             setTimeout(() => {
@@ -673,27 +690,27 @@ export default function SheetPage({ params }: SheetPageProps) {
                 </div>
             )}
 
-        {/* ── Workbook ── */}
-        <div style={{ flex: 1 }}>
-            <Workbook
-                ref={workbookRef}
-                data={data}
-                onChange={(updatedData) => {
-                    if (!dataLoaded.current) return;
-                    // Defer setState out of FortuneSheet's render cycle.
-                    // Fixes "Cannot update a component while rendering a different
-                    // component" triggered by sheet rename and similar internal ops.
-                    dataRef.current = updatedData;
-                    if (onChangeTimer.current) clearTimeout(onChangeTimer.current);
-                    onChangeTimer.current = setTimeout(() => {
-                        setData(updatedData);
-                    }, 0);
-                }}
-                onOp={handleOp}
-            />
-        </div>
+            {/* ── Workbook ── */}
+            <div style={{ flex: 1 }}>
+                <Workbook
+                    ref={workbookRef}
+                    data={data}
+                    onChange={(updatedData) => {
+                        if (!dataLoaded.current) return;
+                        // Defer setState out of FortuneSheet's render cycle.
+                        // Fixes "Cannot update a component while rendering a different
+                        // component" triggered by sheet rename and similar internal ops.
+                        dataRef.current = updatedData;
+                        if (onChangeTimer.current) clearTimeout(onChangeTimer.current);
+                        onChangeTimer.current = setTimeout(() => {
+                            if (isMounted.current) setData(updatedData);
+                        }, 0);
+                    }}
+                    onOp={handleOp}
+                />
+            </div>
 
-        {/* ── Rename modal ── */}
+            {/* ── Rename modal ── */}
             {showRenameModal && (
                 <div style={{
                     position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
